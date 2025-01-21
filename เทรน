@@ -1,0 +1,125 @@
+html สำหรับ สร้างเทรนกราฟ
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bed Score Trend by Bed Number</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h1>Bed Score Trend by Bed Number</h1>
+
+  <!-- Dropdown เลือก Bed Number -->
+  <label for="bedSelector">Select Bed Number:</label>
+  <select id="bedSelector">
+    <option value="all">All Beds</option>
+  </select>
+
+  <!-- Canvas สำหรับกราฟ -->
+  <canvas id="bedChart" width="400" height="200"></canvas>
+
+  <script>
+    // ลิงก์ CSV จาก Google Sheets
+    const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQGYSd-Cd0WfQTBJbFTkshsBR0VosuvC8AoC2lLAPDBwT9IF-6UNa5KqRb26VJ-JqYD8BCD1VUgAW8E/pub?gid=0&single=true&output=csv";
+
+    // ฟังก์ชันโหลด CSV และแปลงเป็นข้อมูล
+    async function fetchCsvData() {
+      const response = await fetch(csvUrl);
+      const data = await response.text();
+
+      // แปลง CSV เป็น Array
+      const rows = data.split("\n").map(row => row.split(","));
+      const headers = rows[0];
+      const body = rows.slice(1);
+
+      // จัดการข้อมูล
+      const structuredData = body.map(row => ({
+        timestamp: row[0],
+        bedNumber: row[1],
+        score: parseInt(row[2])
+      }));
+
+      return structuredData;
+    }
+
+    // ฟังก์ชันสร้างกราฟ
+    async function renderChart(selectedBed) {
+      const data = await fetchCsvData();
+
+      // แยกข้อมูลตาม Bed Number
+      const groupedData = data.reduce((acc, row) => {
+        if (!acc[row.bedNumber]) acc[row.bedNumber] = { timestamps: [], scores: [] };
+        acc[row.bedNumber].timestamps.push(row.timestamp);
+        acc[row.bedNumber].scores.push(row.score);
+        return acc;
+      }, {});
+
+      // ตัวเลือก Bed Number ทั้งหมด
+      const bedNumbers = Object.keys(groupedData).sort((a, b) => a - b);
+
+      // กำหนดค่าให้ dropdown
+      const bedSelector = document.getElementById('bedSelector');
+      if (bedSelector.options.length === 1) { // ถ้าไม่มีตัวเลือกมาก่อน ให้เพิ่ม
+        bedNumbers.forEach(bed => {
+          const option = document.createElement("option");
+          option.value = bed;
+          option.text = `Bed ${bed}`;
+          bedSelector.add(option);
+        });
+      }
+
+      // ข้อมูลสำหรับกราฟ
+      let chartData;
+      if (selectedBed === "all") {
+        // รวมข้อมูลทุกเตียงในกราฟเดียวกัน
+        chartData = {
+          labels: data.map(row => row.timestamp),
+          datasets: bedNumbers.map(bed => ({
+            label: `Bed ${bed}`,
+            data: groupedData[bed].scores,
+            borderColor: `rgba(${Math.random() * 255}, ${Math.random() * 255}, ${Math.random() * 255}, 1)`,
+            borderWidth: 2,
+            fill: false
+          }))
+        };
+      } else {
+        // แสดงเฉพาะข้อมูลของเตียงที่เลือก
+        chartData = {
+          labels: groupedData[selectedBed].timestamps,
+          datasets: [{
+            label: `Bed ${selectedBed}`,
+            data: groupedData[selectedBed].scores,
+            borderColor: 'rgba(75, 192, 192, 1)',
+            borderWidth: 2,
+            fill: false
+          }]
+        };
+      }
+
+      // ลบกราฟเดิมก่อนสร้างใหม่
+      if (window.myChart) window.myChart.destroy();
+
+      const ctx = document.getElementById('bedChart').getContext('2d');
+      window.myChart = new Chart(ctx, {
+        type: 'line',
+        data: chartData,
+        options: {
+          responsive: true,
+          scales: {
+            x: { title: { display: true, text: 'Timestamp' } },
+            y: { title: { display: true, text: 'Score' } }
+          }
+        }
+      });
+    }
+
+    // โหลดกราฟครั้งแรก และเพิ่ม Event Listener
+    renderChart("all");
+    document.getElementById('bedSelector').addEventListener('change', (event) => {
+      renderChart(event.target.value);
+    });
+  </script>
+</body>
+</html>
